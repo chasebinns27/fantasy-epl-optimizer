@@ -22,15 +22,21 @@ def cost_label(cost_tenths):
     return f"£{cost_tenths / 10:.1f}m"
 
 
-def run_fetch():
+def do_fetch():
+    """Run fetch_data.py and return (success, stderr)."""
     result = subprocess.run(
         [sys.executable, "fetch_data.py"],
         capture_output=True, text=True
     )
-    if result.returncode == 0:
+    return result.returncode == 0, result.stderr
+
+
+def run_fetch():
+    success, err = do_fetch()
+    if success:
         st.success("Data refreshed successfully.")
     else:
-        st.error(f"Fetch failed:\n{result.stderr}")
+        st.error(f"Fetch failed:\n{err}")
 
 
 def build_player_options(players, position):
@@ -55,6 +61,15 @@ def render_transfer_table(rows):
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="FPL Transfer Optimizer", page_icon="⚽", layout="wide")
 st.title("⚽ FPL Transfer Optimizer")
+
+# ── Auto-fetch on first load (required for Streamlit Community Cloud) ─────────
+if not get_last_updated():
+    with st.spinner("Loading FPL data for the first time..."):
+        success, err = do_fetch()
+    if not success:
+        st.error(f"Failed to load FPL data from the API:\n{err}")
+        st.stop()
+    st.rerun()
 
 # ── Sidebar: data status + refresh + budget ───────────────────────────────────
 with st.sidebar:
@@ -81,7 +96,7 @@ with st.sidebar:
 # ── Load players + saved squad ────────────────────────────────────────────────
 all_players = get_all_players()
 if not all_players:
-    st.warning("No player data found. Click **Refresh Data** in the sidebar to fetch it.")
+    st.error("No player data available. Try clicking **Refresh Data** in the sidebar.")
     st.stop()
 
 id_to_player = {p["id"]: p for p in all_players}
