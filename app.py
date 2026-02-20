@@ -3,7 +3,7 @@ import sys
 
 import streamlit as st
 
-from db import get_all_players, get_last_updated
+from db import init_db, get_all_players, get_last_updated
 from optimizer import recommend_transfers, recommend_all_transfers
 from squad_store import save_squad, load_squad_ids
 
@@ -61,6 +61,9 @@ def render_transfer_table(rows):
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="FPL Transfer Optimizer", page_icon="⚽", layout="wide")
 st.title("⚽ FPL Transfer Optimizer")
+
+# Ensure DB schema exists before any queries (critical on first Cloud load)
+init_db()
 
 # ── Auto-fetch on first load (required for Streamlit Community Cloud) ─────────
 if not get_last_updated():
