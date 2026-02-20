@@ -5,7 +5,6 @@ import streamlit as st
 
 from db import init_db, get_all_players, get_last_updated
 from optimizer import recommend_transfers, recommend_all_transfers
-from squad_store import save_squad, load_squad_ids
 
 POSITIONS = ["GKP", "DEF", "MID", "FWD"]
 POSITION_COUNTS = {"GKP": 2, "DEF": 5, "MID": 5, "FWD": 3}
@@ -102,12 +101,9 @@ if not all_players:
     st.error("No player data available. Try clicking **Refresh Data** in the sidebar.")
     st.stop()
 
-id_to_player = {p["id"]: p for p in all_players}
-saved_ids = load_squad_ids()  # {position: [id, ...]}
-
 # ── Squad selection ───────────────────────────────────────────────────────────
 st.header("Your Squad")
-st.caption("Select all 15 players. Your selection is saved automatically.")
+st.caption("Select all 15 players in your current lineup.")
 
 squad = []
 selection_complete = True
@@ -119,18 +115,9 @@ for col, pos in zip(cols, POSITIONS):
         options = build_player_options(all_players, pos)
         required = POSITION_COUNTS[pos]
 
-        # Restore saved labels that still exist in the current options
-        saved_labels = [
-            label for pid in saved_ids.get(pos, [])
-            if pid in id_to_player
-            for label, p in options.items()
-            if p["id"] == pid
-        ]
-
         selected_labels = st.multiselect(
             f"Select {required} {pos}(s)",
             options=list(options.keys()),
-            default=saved_labels,
             max_selections=required,
             key=f"squad_{pos}",
             label_visibility="collapsed",
@@ -139,10 +126,6 @@ for col, pos in zip(cols, POSITIONS):
             squad.append(options[label])
         if len(selected_labels) < required:
             selection_complete = False
-
-# Save squad whenever it is complete
-if selection_complete:
-    save_squad(squad)
 
 st.divider()
 
