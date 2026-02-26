@@ -4,6 +4,7 @@ import sys
 import streamlit as st
 
 from db import init_db, get_all_players, get_last_updated
+from fpl_auth import get_current_gw, get_entry_name, get_entry_picks
 from optimizer import recommend_transfers, recommend_all_transfers
 
 POSITIONS = ["GKP", "DEF", "MID", "FWD"]
@@ -73,8 +74,80 @@ if not get_last_updated():
         st.stop()
     st.rerun()
 
-# ── Sidebar: data status + refresh + budget ───────────────────────────────────
+# ── Load players (needed by sidebar import logic and squad selection) ─────────
+all_players = get_all_players()
+if not all_players:
+    st.error("No player data available. Try clicking **Refresh Data** in the sidebar.")
+    st.stop()
+
+# ── Sidebar: FPL account + data status + budget ───────────────────────────────
 with st.sidebar:
+    st.header("Import Your Team")
+
+    if "fpl_account" in st.session_state:
+        acct = st.session_state["fpl_account"]
+        st.success(f"Loaded: {acct['name']}")
+        if st.button("Clear"):
+            st.session_state.pop("fpl_account", None)
+            st.rerun()
+    else:
+        with st.expander("Load from FPL", expanded=True):
+            st.caption(
+                "**How to find your Team ID:** log in at "
+                "fantasy.premierleague.com, go to **Points**, "
+                "then look at the URL — it will contain "
+                "`/entry/XXXXXXX/event/` and the number is your Team ID."
+            )
+            team_id = st.number_input(
+                "FPL Team ID",
+                min_value=1, step=1, value=None,
+                placeholder="e.g. 1234567",
+                key="fpl_team_id",
+            )
+
+            if st.button("Import My Team", type="primary"):
+                if not team_id:
+                    st.error("Enter your FPL Team ID.")
+                else:
+                    with st.spinner("Fetching your squad from FPL..."):
+                        try:
+                            team_name = get_entry_name(int(team_id))
+                            gw = get_current_gw()
+                            pick_ids = get_entry_picks(int(team_id), gw)
+
+                            player_by_id = {p["id"]: p for p in all_players}
+                            picks_by_pos = {pos: [] for pos in POSITIONS}
+                            missing_count = 0
+
+                            for eid in pick_ids:
+                                if eid in player_by_id:
+                                    p = player_by_id[eid]
+                                    label = f"{p['name']} ({p['team']}, {cost_label(p['cost'])})"
+                                    picks_by_pos[p["position"]].append(label)
+                                else:
+                                    missing_count += 1
+
+                            for pos, required in POSITION_COUNTS.items():
+                                st.session_state[f"squad_{pos}"] = picks_by_pos[pos][:required]
+
+                            st.session_state["fpl_account"] = {
+                                "team_id": int(team_id),
+                                "name": team_name,
+                            }
+
+                            if missing_count:
+                                st.warning(
+                                    f"{missing_count} player(s) from your FPL team weren't found "
+                                    "in local data. Try **Refresh Data** in the sidebar."
+                                )
+                        except ValueError as e:
+                            st.error(str(e))
+                        except Exception as e:
+                            st.error(f"Import failed: {e}")
+                        else:
+                            st.rerun()
+
+    st.divider()
     st.header("Data")
     last_updated = get_last_updated()
     if last_updated:
@@ -94,12 +167,6 @@ with st.sidebar:
         min_value=0.0, max_value=20.0, value=0.0, step=0.1,
         help="Money in the bank beyond what selling your transfer-out player raises."
     )
-
-# ── Load players + saved squad ────────────────────────────────────────────────
-all_players = get_all_players()
-if not all_players:
-    st.error("No player data available. Try clicking **Refresh Data** in the sidebar.")
-    st.stop()
 
 # ── Squad selection ───────────────────────────────────────────────────────────
 st.header("Your Squad")
